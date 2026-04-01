@@ -165,6 +165,10 @@ timing side-channel.
                  file specifying the order (log.csv). Used for generating
                  input file for timing tests.
 --force          Don't abort when the output dir exists
+--status-delay num How often to print the status line.
+--status-newline Use newline instead of carriage return for
+                 printing status line. Useful when redirecting
+                 standard output to a file.
 --verbose        Print status progress when generating repeated probes
 --help           This message
 
@@ -174,7 +178,8 @@ Supported probes:
     i, j) for i, j in CiphertextGenerator.types.items())))
 
 
-def gen_timing_probes(out_dir, pub, kem, args, repeat, verbose=False):
+def gen_timing_probes(out_dir, pub, kem, args, repeat, verbose=False,
+                      status_delay=None, status_newline=None):
     generator = CiphertextGenerator(kem, pub)
 
     probes = {}
@@ -232,7 +237,9 @@ def gen_timing_probes(out_dir, pub, kem, args, repeat, verbose=False):
         if verbose:
             kwargs = {}
             kwargs['unit'] = ' ciphertext'
-            kwargs['delay'] = 2
+            kwargs['prefix'] = 'decimal'
+            kwargs['delay'] = status_delay
+            kwargs['end'] = status_newline
             progress = Thread(target=progress_report, args=(status,),
                               kwargs=kwargs)
             progress.start()
@@ -265,10 +272,14 @@ if __name__ == "__main__":
     repeat = None
     force_dir = False
     verbose = False
+    status_delay = None
+    status_newline = None
 
     argv = sys.argv[1:]
     opts, args = getopt.getopt(argv, "c:o:", ["help", "describe=", "repeat=",
-                                              "force", "verbose"])
+                                              "force", "verbose",
+                                              "status-delay=",
+                                              "status-newline"])
     for opt, arg in opts:
         if opt == "-c":
             with open(arg, "r") as key_fd:
@@ -282,6 +293,10 @@ if __name__ == "__main__":
             force_dir = True
         elif opt == "--repeat":
             repeat = int(arg)
+        elif opt == "--status-delay":
+            status_delay = float(arg)
+        elif opt == "--status-newline":
+            status_newline = '\n'
         elif opt == "--verbose":
             verbose = True
         elif opt == "--describe":
@@ -321,6 +336,7 @@ if __name__ == "__main__":
     if repeat is None:
         single_shot(out_dir, key, kem, args)
     else:
-        gen_timing_probes(out_dir, key, kem, args, repeat, verbose)
+        gen_timing_probes(out_dir, key, kem, args, repeat, verbose,
+                          status_delay, status_newline)
 
     print("done")
