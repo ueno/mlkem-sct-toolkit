@@ -2,7 +2,7 @@ Nettle test harness for testing ML-KEM
 
 Install Nettle:
 ```
-git clone --depth=1 --branch=wip/dueno/mlkem https://git.lysator.liu.se/ueno/nettle.git
+git clone --depth=1 https://git.lysator.liu.se/nettle/nettle.git
 cd nettle
 ./.bootstrap
 ./configure --disable-documentation --prefix=$PWD/install

@@ -1,5 +1,6 @@
 #include <memory.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -149,13 +150,10 @@ static bool pem_read_privkey(FILE *fp, uint8_t **data, size_t size)
     struct base64_decode_ctx decode;
     base64_decode_init(&decode);
     size_t length = strlen((char *)buffer);
-    if (base64_decode_update(&decode, &length, buffer, length,
-                             (const char *)buffer) < 0) {
-        free(buffer);
-        return false;
-    }
-    base64_decode_final(&decode);
-    if (length != DER_HEADER_SIZE + size) {
+    if (!base64_decode_update(&decode, &length, buffer, length,
+                             (const char *)buffer) ||
+	!base64_decode_final(&decode) ||
+	length != DER_HEADER_SIZE + size) {
         free(buffer);
         return false;
     }
@@ -172,14 +170,13 @@ int main(int argc, char *argv[]) {
     FILE *fp;
     char *key_file_name = NULL, *in_file_name = NULL, *out_file_name = NULL;
     int in_fd = -1, out_fd = -1;
-    unsigned char *key = NULL;
-    unsigned char *ciphertext = NULL;
-    unsigned char *plaintext = NULL;
-    unsigned char *ciphertext2 = NULL;
+    uint8_t *key = NULL;
+    uint8_t *ciphertext = NULL;
+    uint8_t secret[32];
+    uint16_t *scratch = NULL;
     int opt;
     uint64_t time_before, time_after, time_diff;
     const struct ml_kem_params *params;
-    uint16_t *scratch = NULL;
 
     while ((opt = getopt(argc, argv, "i:o:k:n:h")) != -1 ) {
         switch (opt) {
@@ -215,11 +212,11 @@ int main(int argc, char *argv[]) {
 
     switch (ciphertext_len) {
     case ML_KEM_768_CIPHERTEXT_SIZE:
-        params = &nettle_ml_kem_768_params;
+        params = nettle_get_ml_kem_768_params();
         key_len = ML_KEM_768_PRIVATE_KEY_SIZE;
         break;
     case ML_KEM_1024_CIPHERTEXT_SIZE:
-        params = &nettle_ml_kem_1024_params;
+        params = nettle_get_ml_kem_1024_params();
         key_len = ML_KEM_1024_PRIVATE_KEY_SIZE;
         break;
     default:
@@ -240,23 +237,13 @@ int main(int argc, char *argv[]) {
         goto err;
     }
 
-    fprintf(stderr, "malloc(plaintext)\n");
-    plaintext = malloc(ciphertext_len);
-    if (!plaintext)
-        goto err;
-
     fprintf(stderr, "malloc(ciphertext)\n");
     ciphertext = malloc(ciphertext_len);
     if (!ciphertext)
         goto err;
 
-    fprintf(stderr, "malloc(ciphertext2)\n");
-    ciphertext2 = malloc(ciphertext_len);
-    if (!ciphertext2)
-        goto err;
-
     fprintf(stderr, "malloc(scratch)\n");
-    scratch = calloc(ml_kem_decapsulate_itch(params), sizeof(uint16_t));
+    scratch = calloc(ml_kem_decap_itch(params), sizeof(uint16_t));
     if (!scratch)
         goto err;
 
@@ -287,8 +274,7 @@ int main(int argc, char *argv[]) {
 
         time_before = get_time_before();
 
-        ml_kem_decapsulate(params, key, ciphertext,
-                           plaintext, ciphertext2, scratch);
+        ml_kem_decap(params, key, secret, ciphertext, scratch);
 
         time_after = get_time_after();
 
@@ -311,10 +297,8 @@ int main(int argc, char *argv[]) {
 
     out:
     free(scratch);
-    free(ciphertext2);
     free(key);
     free(ciphertext);
-    free(plaintext);
     if (in_fd >= 0)
         close(in_fd);
     if (out_fd >= 0)
